@@ -1,15 +1,20 @@
 import streamlit as st
-import random
 import time
 import requests
 import asyncio
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 import pykakasi
 import re
 
 # ================== HELPERS ==================
 def contains_kanji(text):
     return bool(re.search(r'[\u4e00-\u9faf]', text))
+
+def contains_katakana(text):
+    return bool(re.search(r'[\u30a0-\u30ff]', text))
+
+def strip_html(text):
+    return re.sub(r'<.*?>', '', text)
 
 async def get_random_sentence():
     try:
@@ -18,14 +23,13 @@ async def get_random_sentence():
     except:
         word = "word"
 
-    translator = Translator()
+    # ---- Deep Translator ----
     try:
-        translation = await translator.translate(word, src='en', dest='ja')
-        japanese_text = translation.text
+        japanese_text = GoogleTranslator(source="en", target="ja").translate(word)
     except:
         japanese_text = word
 
-    # Kanji → Hiragana
+    # ---- Kanji → Hiragana only ----
     if contains_kanji(japanese_text):
         kakasi = pykakasi.kakasi()
         kakasi.setMode("J", "H")
@@ -36,7 +40,7 @@ async def get_random_sentence():
     else:
         kana_text = japanese_text
 
-    # Kana → Romaji
+    # ---- Kana → Romaji ----
     kakasi = pykakasi.kakasi()
     kakasi.setMode("J", "H")
     kakasi.setMode("H", "a")
@@ -46,7 +50,7 @@ async def get_random_sentence():
     romaji_text = conv.do(kana_text).replace(" ", "")
 
     return {
-        "english": word,
+        "english": strip_html(word),
         "japanese": japanese_text,
         "kana": kana_text,
         "romaji": romaji_text
@@ -80,6 +84,11 @@ st.markdown("""
     opacity: 0.7;
     margin-top: 4px;
 }
+            
+.kana-sub.hidden {
+    display: none;
+}
+
 
 .kana-label {
     display: block;
@@ -135,20 +144,16 @@ else:
 
         # ---------- LEFT: SENTENCE DISPLAY ----------
         with col_left:
-            sub_html = ""
-            # Show Hiragana under Kanji if Kanji exists
-            if contains_kanji(sentence['japanese']):
-                sub_html = f"<div class='kana-sub'>{sentence['kana']}</div>"
-
-            # English word label
-            label_html = f"<div class='kana-label'>{sentence['english']}</div>"
+            show_sub = contains_kanji(sentence['japanese'])
 
             st.markdown(
                 f"""
                 <div class='card'>
                     <div class='kana-main'>{sentence['japanese']}</div>
-                    {sub_html}
-                    {label_html}
+                    <div class='kana-sub {"hidden" if not show_sub else ""}'>
+                        {sentence['kana']}
+                    </div>
+                    <div class='kana-label'>{sentence['english']}</div>
                 </div>
                 """,
                 unsafe_allow_html=True
